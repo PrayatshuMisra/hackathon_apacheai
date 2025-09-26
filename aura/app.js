@@ -1,5 +1,53 @@
 // ApacheAI - Intelligent Aviation Weather Briefings (MVP SPA)
 
+// ---------- Supabase Client (Browser ESM via CDN) ----------
+// Provide your credentials at runtime by defining window.SUPABASE_URL and window.SUPABASE_ANON_KEY
+// e.g., in the browser console: window.SUPABASE_URL = 'https://xyz.supabase.co'; window.SUPABASE_ANON_KEY = '...'; then reload
+let supabase = null;
+let supabaseReady = false;
+(async () => {
+  try {
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    const SUPABASE_URL = window.SUPABASE_URL || '';
+    const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || '';
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.warn('Supabase not configured. Set window.SUPABASE_URL and window.SUPABASE_ANON_KEY.');
+    } else {
+      supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      supabaseReady = true;
+    }
+  } catch (e) {
+    console.warn('Failed to initialize Supabase client:', e);
+  }
+})();
+
+async function savePirepRecord(record) {
+  try {
+    if (!supabase || !supabaseReady) {
+      console.warn('Supabase client not ready; skipping save.');
+      return { skipped: true };
+    }
+    const { error } = await supabase.from('pireps').insert([record]);
+    if (error) throw error;
+    return { success: true };
+  } catch (err) {
+    console.error('Failed to save PIREP to Supabase:', err);
+    return { error: String(err && err.message || err) };
+  }
+}
+
+function parseIcaoFromPirep(pirepLine) {
+  try {
+    if (!pirepLine) return '';
+    const m = pirepLine.match(/\b\/OV\s+([A-Z]{3,4})\b/);
+    return (m && m[1]) || '';
+  } catch { return ''; }
+}
+
+function toUtcIsoString(d) {
+  try { return (d instanceof Date ? d : new Date(d)).toISOString(); } catch { return new Date().toISOString(); }
+}
+
 const AppState = {
   route: '/',
   data: null,
@@ -471,13 +519,25 @@ function setupPirepConversion() {
     const textDescription = `${problemType.value} at ${altitude.value} near ${location.value} in ${aircraftModel.value}${pirepInput.value.trim() ? '. Additional details: ' + pirepInput.value.trim() : ''}`;
 
     // Prepare the PIREP data - send both structured data and text
+    // Extract a 4-letter ICAO if present in location (skip cardinal words)
+    let icaoGuess = '';
+    try {
+      const txt = String(location.value || '').toUpperCase();
+      const matches = txt.match(/[A-Z]{4}/g) || [];
+      const skip = new Set(['NORTH','SOUTH','EAST','WEST']);
+      for (let i = matches.length - 1; i >= 0; i--) {
+        const candidate = matches[i];
+        if (!skip.has(candidate)) { icaoGuess = candidate; break; }
+      }
+    } catch {}
     const pirepData = {
       text: textDescription, // This is what the API expects
       problemType: problemType.value,
       location: location.value,
       aircraftModel: aircraftModel.value,
       altitude: altitude.value,
-      description: pirepInput.value.trim()
+      description: pirepInput.value.trim(),
+      icao: icaoGuess
     };
 
     // Show loading state
@@ -505,6 +565,8 @@ function setupPirepConversion() {
       // Display the result
       pirepOutput.textContent = data.pirep;
       pirepResult.classList.remove('hidden');
+
+      // Client-side insert disabled; server now stores the PIREP.
       
       // Show success message
       pirepSuccess.classList.remove('hidden');
@@ -1185,7 +1247,8 @@ function splitArcAtAntimeridian(points) {
     const btn = document.createElement('button');
     btn.id = 'voice-fab';
     btn.type = 'button';
-    btn.title = 'Voice assistant (press V to toggle)';
+    // Updated title to be specific
+    btn.title = 'Voice assistant (press Right Alt to toggle)';
     btn.innerHTML = '<span class="mic-dot"></span>';
     btn.className = 'voice-fab';
     btn.style.display = 'none'; // hidden by default; enabled in PIREP mode only
@@ -1475,7 +1538,8 @@ function splitArcAtAntimeridian(points) {
     if (!window.__voiceHotkeyBound) {
       window.__voiceHotkeyBound = true;
       window.addEventListener('keydown', (e) => {
-        if (e.key.toLowerCase() === 'v' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // Changed to check for the specific code 'AltRight'
+        if (e.code === 'AltRight' && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
           e.preventDefault();
           if (isPirepModeEnabled()) voice.toggle();
         }

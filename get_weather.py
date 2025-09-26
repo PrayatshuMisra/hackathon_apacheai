@@ -5,6 +5,44 @@ from flask import Flask, request, jsonify, render_template
 from dotenv import load_dotenv
 import datetime
 
+# Supabase REST config (server-side)
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+
+def insert_pirep_row(time_utc_iso: str, icao: str, pirep: str, aircraft_name: str):
+    """Best-effort insert into Supabase via REST; does not raise on error."""
+    try:
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            return {"skipped": True, "reason": "Supabase not configured"}
+        url = f"{SUPABASE_URL}/rest/v1/pireps"
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        }
+        payload = [{
+            "time_utc": time_utc_iso,
+            "icao": icao,
+            "pirep": pirep,
+            "aircraft_name": aircraft_name,
+        }]
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        if not resp.ok:
+            return {"error": f"{resp.status_code} {resp.text}"}
+        return {"success": True}
+    except Exception as e:
+        return {"error": str(e)}
+
+def parse_icao_from_pirep(pirep_line: str) -> str:
+    try:
+        import re
+        # Match /OV <ICAO><optional digits> or /OV <ICAO> <rest>
+        m = re.search(r"/OV\s+([A-Z]{4})", pirep_line or "")
+        return m.group(1) if m else ""
+    except Exception:
+        return ""
+
 # --- Initialization ---
 load_dotenv()
 
@@ -197,6 +235,14 @@ def convert_to_pirep():
         
         try:
             pirep = convert_english_to_pirep(user_text)
+
+            # Server-side insert to Supabase (best-effort)
+            time_iso = datetime.datetime.utcnow().isoformat() + 'Z'
+            # Prefer ICAO parsed from PIREP /OV segment; fallback to client hint
+            icao_guess = parse_icao_from_pirep(pirep) or (data.get('icao') or '').upper()
+            aircraft_name = data.get('aircraftModel') or data.get('aircraft_name') or ''
+            _ = insert_pirep_row(time_iso, icao_guess, pirep, aircraft_name)
+
             return jsonify({
                 'success': True,
                 'pirep': pirep

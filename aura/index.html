@@ -21,66 +21,7 @@
       <div class="loader-spinner"></div>
     </div>
   
-    <div id="app" class="relative z-10">
-      <!-- Green title -->
-      <h1 class="apache-title">ApacheAI – Intelligent Aviation Weather Briefings</h1>
-      <main class="min-h-screen flex flex-col items-center justify-center px-6 py-12">
-        <section class="text-center max-w-4xl w-full">
-          <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight">
-            ApacheAI <span class="text-indigo-400">–</span> Intelligent Aviation Weather Briefings
-          </h1>
-          <p class="mt-4 text-lg" style="color: #ffffff;">
-            Fast, readable, and predictive weather insights for safer flight decisions.
-          </p>
-          <div class="mt-10">
-            <button id="cta-start" class="btn-shimmer glow-hover inline-flex items-center gap-2 rounded-xl px-6 py-3 font-medium shadow-lg shadow-green-900/40 transition apache-green-btn">
-              Start Briefing
-              <span aria-hidden="true">→</span>
-            </button>
-          </div>
-        </section>
-
-        <section class="mt-14 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 w-full max-w-6xl">
-          ${featureCard('Unified Threat Score','Condenses conditions into a single actionable index.','⚠️')}
-          ${featureCard('Predictive Hazard Alerts','Proactive heads-up on convective, icing, and wind shear.','🌩️')}
-          ${featureCard('Natural Language Briefings','Plain-English summaries for your route.','🗣️')}
-          ${featureCard('Dynamic Anomaly Detection','Spots abnormal trends and rapid deteriorations.','📈')}
-        </section>
-
-        <div class="mt-16 text-sm" style="color: #ffffff;">MVP demo – Map and ML features are placeholders.</div>
-        
-        <!-- PIREP Conversion Section -->
-        <section class="mt-16 w-full max-w-3xl p-6 bg-gray-900 rounded-xl shadow-lg">
-          <h2 class="text-2xl font-bold mb-4" style="color: var(--apache-green);">Convert PIREP to Standard Format</h2>
-          <div class="flex flex-col space-y-4">
-            <textarea 
-              id="pirep-input" 
-              class="w-full h-32 p-3 bg-gray-800 text-white border border-gray-700 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="Enter your pilot report in plain English (e.g., 'Moderate turbulence at 8000 feet, light rime icing, 20 miles west of KJFK')"
-            ></textarea>
-            <button 
-              id="convert-pirep-btn" 
-              class="btn-shimmer glow-hover inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 font-medium shadow-lg shadow-green-900/40 transition apache-green-btn"
-            >
-              Convert to PIREP
-            </button>
-            <div id="pirep-result" class="mt-4 p-4 bg-gray-800 rounded-lg font-mono text-sm overflow-x-auto hidden">
-              <div class="flex justify-between items-center mb-2">
-                <span class="text-gray-400">Standard PIREP:</span>
-                <button id="copy-pirep-btn" class="text-gray-400 hover:text-white">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
-                    <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2v-2a1 1 0 112 0v2a4 4 0 01-4 4H6a4 4 0 01-4-4V5a4 4 0 014-4h2a1 1 0 110 2H6z" />
-                    <path d="M15 1a1 1 0 10-2 0v4a1 1 0 01-1 1h-4a1 1 0 100 2h4a3 3 0 003-3V1z" />
-                  </svg>
-                </button>
-              </div>
-              <div id="pirep-output" class="text-green-400"></div>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
+    <div id="app" class="relative z-10"></div>
   
     <script type="module" src="app.js"></script>
   </body>
