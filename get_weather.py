@@ -43,6 +43,46 @@ def parse_icao_from_pirep(pirep_line: str) -> str:
     except Exception:
         return ""
 
+def get_recent_pireps(icao_codes: list) -> list:
+    """Retrieve PIREPs from database for given ICAO codes that are less than 6 hours old."""
+    try:
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            return []
+        
+        # Calculate 6 hours ago in UTC
+        six_hours_ago = datetime.datetime.utcnow() - datetime.timedelta(hours=6)
+        six_hours_ago_iso = six_hours_ago.isoformat() + 'Z'
+        
+        # Convert ICAO codes to uppercase for consistent matching
+        icao_codes_upper = [code.upper() for code in icao_codes if code]
+        
+        if not icao_codes_upper:
+            return []
+        
+        # Build query URL with filters
+        # Filter by time (greater than 6 hours ago) and ICAO codes
+        icao_filter = ','.join([f'"{icao}"' for icao in icao_codes_upper])
+        url = f"{SUPABASE_URL}/rest/v1/pireps?time_utc=gte.{six_hours_ago_iso}&icao=in.({icao_filter})&order=time_utc.desc"
+        
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            "Content-Type": "application/json",
+        }
+        
+        resp = requests.get(url, headers=headers, timeout=10)
+        if not resp.ok:
+            print(f"Error fetching PIREPs: {resp.status_code} {resp.text}")
+            return []
+        
+        pireps = resp.json()
+        print(f"Retrieved {len(pireps)} recent PIREPs for ICAO codes: {icao_codes_upper}")
+        return pireps
+        
+    except Exception as e:
+        print(f"Error retrieving PIREPs: {e}")
+        return []
+
 # --- Initialization ---
 load_dotenv()
 
@@ -89,18 +129,27 @@ def get_taf_data(icao_codes_str: str):
 
 # --- AI Summary Generation ---
 
-def generate_summary_with_gemini(metars, tafs):
+def generate_summary_with_gemini(metars, tafs, pireps=None):
     """Generates a concise weather briefing using the Gemini API."""
+    if pireps is None:
+        pireps = []
+        
     if not model:
         # Fallback summary when Gemini is not available
         icao_codes = [m.get('stationId', '') for m in metars if m.get('stationId')]
         route = " → ".join(icao_codes) if icao_codes else "Unknown route"
         
+        # Add PIREP section to fallback
+        pirep_section = ""
+        if pireps:
+            pirep_section = f"""
+    <tr><th>Recent PIREPs</th><td>{len(pireps)} pilot report(s) available for route airports (last 6 hours)</td></tr>"""
+        
         return f"""
 <div class="briefing-content">
   <table class="briefing-table">
     <tr><th>Route Summary</th><td>Weather briefing for {route}. Conditions appear favorable for flight operations.</td></tr>
-    <tr><th>Recommendations</th><td>Monitor weather conditions and maintain standard flight procedures.</td></tr>
+    <tr><th>Recommendations</th><td>Monitor weather conditions and maintain standard flight procedures.</td></tr>{pirep_section}
   </table>
   
   <div class="per-airport-section">
@@ -125,6 +174,31 @@ def generate_summary_with_gemini(metars, tafs):
     pilot_profile = os.getenv("PILOT_PROFILE", "General aviation VFR pilot")
     airport_directory = " → ".join(sorted({m.get('stationId', '') for m in metars if m.get('stationId')}))
     weather_data = f"METARs:\n{metar_texts}\nTAFs:\n{taf_texts}"
+    
+    # Add PIREP data to weather information
+    pirep_data = ""
+    if pireps:
+        pirep_texts = []
+        for pirep in pireps:
+            time_str = pirep.get('time_utc', '')
+            icao = pirep.get('icao', '')
+            pirep_text = pirep.get('pirep', '')
+            aircraft = pirep.get('aircraft_name', '')
+            
+            # Format time for display (convert from ISO to readable format)
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+                time_display = dt.strftime('%H:%M UTC')
+            except:
+                time_display = time_str
+            
+            pirep_entry = f"[{time_display}] {icao}: {pirep_text}"
+            if aircraft:
+                pirep_entry += f" (Aircraft: {aircraft})"
+            pirep_texts.append(pirep_entry)
+        
+        pirep_data = f"\n\nRECENT PIREPs (Last 6 Hours):\n" + "\n".join(pirep_texts)
 
     # Updated prompt with table format and collapsible per-airport section
     prompt = f"""
@@ -132,9 +206,10 @@ You are an expert aviation weather briefer. Audience pilot profile: '{pilot_prof
 
 Task:
 - Produce a very concise flight weather briefing (HTML format).
-- Route summary: Max 2–3 lines, clear & safety-focused.
+- Route summary: Max 2-3 lines, clear & safety-focused.
 - Per-airport summary: **exactly 1 line per ICAO**, include only if conditions are extreme 
   (low vis, strong winds, storms, icing, turbulence, etc.).
+- PIREP Integration: If PIREPs are available, add a "Recent PIREPs" row to the table and mention significant pilot reports in your analysis.
 - Keep plain language, avoid unnecessary details.
 
 HTML Output Structure:
@@ -142,6 +217,7 @@ HTML Output Structure:
   <table class="briefing-table">
     <tr><th>Route Summary</th><td>Brief overall conditions for the route</td></tr>
     <tr><th>Recommendations</th><td>Speed, altitude, or diversion advice</td></tr>
+    {f'<tr><th>Recent PIREPs</th><td>Highlight significant pilot reports from the last 6 hours</td></tr>' if pireps else ''}
   </table>
 
   <div class="per-airport-section">
@@ -159,7 +235,7 @@ AIRPORT DIRECTORY:
 {airport_directory}
 
 RAW WEATHER DATA START
-{weather_data}
+{weather_data}{pirep_data}
 RAW WEATHER DATA END
 """
 
@@ -172,11 +248,17 @@ RAW WEATHER DATA END
         icao_codes = [m.get('stationId', '') for m in metars if m.get('stationId')]
         route = " → ".join(icao_codes) if icao_codes else "Unknown route"
         
+        # Add PIREP section to error fallback
+        pirep_section = ""
+        if pireps:
+            pirep_section = f"""
+    <tr><th>Recent PIREPs</th><td>{len(pireps)} pilot report(s) available for route airports (last 6 hours)</td></tr>"""
+        
         return f"""
 <div class="briefing-content">
   <table class="briefing-table">
     <tr><th>Route Summary</th><td>Weather briefing for {route}. Please check official weather sources for current conditions.</td></tr>
-    <tr><th>Recommendations</th><td>Monitor weather conditions and maintain standard flight procedures.</td></tr>
+    <tr><th>Recommendations</th><td>Monitor weather conditions and maintain standard flight procedures.</td></tr>{pirep_section}
   </table>
   
   <div class="per-airport-section">
@@ -205,15 +287,24 @@ def get_briefing():
     if not icao_codes_str:
         return jsonify({"error": "No ICAO codes provided"}), 400
 
+    # Parse ICAO codes from the comma-separated string
+    icao_codes = [code.strip().upper() for code in icao_codes_str.split(',') if code.strip()]
+    
+    # Fetch weather data
     metar_reports = get_metar_data(icao_codes_str)
     taf_reports = get_taf_data(icao_codes_str)
     
-    summary = generate_summary_with_gemini(metar_reports, taf_reports)
+    # Fetch recent PIREPs for the route
+    pirep_reports = get_recent_pireps(icao_codes)
+    
+    # Generate summary with PIREP integration
+    summary = generate_summary_with_gemini(metar_reports, taf_reports, pirep_reports)
 
     response_data = {
         "summary": summary,
         "metar_reports": metar_reports,
-        "taf_reports": taf_reports
+        "taf_reports": taf_reports,
+        "pirep_reports": pirep_reports
     }
     
     return jsonify(response_data)
