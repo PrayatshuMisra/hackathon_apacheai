@@ -168,6 +168,20 @@ function renderFlightPlan() {
           <input id="route-input" class="flex-1 rounded-xl bg-white/10 border border-white/20 focus:border-indigo-400 focus:outline-none px-4 py-3 placeholder:text-gray-400" placeholder="ICAO route (e.g., KRIC KJFK KORD)" />
           <button id="btn-generate" class="btn-shimmer glow-hover rounded-xl px-5 py-3 font-medium apache-green-btn">Generate Briefing</button>
         </div>
+        
+        <!-- NOTAMs Toggle Option -->
+        <div class="mt-4 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <label class="inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggle-notams" class="sr-only peer">
+              <div class="relative w-11 h-6 bg-gray-700 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+              <span class="ms-3 text-sm font-medium" style="color: var(--apache-green);">Include NOTAMs</span>
+            </label>
+          </div>
+          <div class="text-xs text-gray-400">
+            Include Notice to Airmen for route airports
+          </div>
+        </div>
       </div>
       
       <!-- PIREP Conversion Section -->
@@ -341,10 +355,18 @@ function attachEvents() {
   if (generate) generate.addEventListener('click', async () => {
     const val = /** @type {HTMLInputElement} */(document.getElementById('route-input')).value.trim();
     if (!val) return;
+    
+    // Check if NOTAMs toggle is enabled
+    const notamsToggle = /** @type {HTMLInputElement} */(document.getElementById('toggle-notams'));
+    const includeNotams = notamsToggle ? notamsToggle.checked : false;
+    
     try {
       showGlobalLoader(true);
       toggleFaviconSpinner(true);
-      const params = new URLSearchParams({ codes: val.replace(/\s+/g, ',') });
+      const params = new URLSearchParams({ 
+        codes: val.replace(/\s+/g, ','),
+        include_notams: includeNotams.toString()
+      });
       const resp = await fetch(`/briefing?${params.toString()}`);
       if (!resp.ok) throw new Error('Failed to fetch briefing');
       const data = await resp.json();

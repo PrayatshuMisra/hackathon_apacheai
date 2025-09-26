@@ -83,6 +83,42 @@ def get_recent_pireps(icao_codes: list) -> list:
         print(f"Error retrieving PIREPs: {e}")
         return []
 
+def get_notams_data(icao_codes: list) -> list:
+    """Retrieve NOTAMs from Supabase database for given ICAO codes."""
+    try:
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            print("Supabase not configured for NOTAMs.")
+            return []
+        
+        # Convert ICAO codes to uppercase for consistent matching
+        icao_codes_upper = [code.upper() for code in icao_codes if code]
+        
+        if not icao_codes_upper:
+            return []
+        
+        # Build query URL with filters
+        icao_filter = ','.join([f'"{icao}"' for icao in icao_codes_upper])
+        url = f"{SUPABASE_URL}/rest/v1/notams?icao_code=in.({icao_filter})&order=start_time.desc"
+        
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            "Content-Type": "application/json",
+        }
+        
+        resp = requests.get(url, headers=headers, timeout=10)
+        if not resp.ok:
+            print(f"Error fetching NOTAMs: {resp.status_code} {resp.text}")
+            return []
+        
+        notams = resp.json()
+        print(f"Retrieved {len(notams)} NOTAMs for ICAO codes: {icao_codes_upper}")
+        return notams
+        
+    except Exception as e:
+        print(f"Error retrieving NOTAMs: {e}")
+        return []
+
 # --- Initialization ---
 load_dotenv()
 
@@ -129,10 +165,12 @@ def get_taf_data(icao_codes_str: str):
 
 # --- AI Summary Generation ---
 
-def generate_summary_with_gemini(metars, tafs, pireps=None):
+def generate_summary_with_gemini(metars, tafs, pireps=None, notams=None):
     """Generates a concise weather briefing using the Gemini API."""
     if pireps is None:
         pireps = []
+    if notams is None:
+        notams = []
         
     if not model:
         # Fallback summary when Gemini is not available
@@ -145,11 +183,17 @@ def generate_summary_with_gemini(metars, tafs, pireps=None):
             pirep_section = f"""
     <tr><th>Recent PIREPs</th><td>{len(pireps)} pilot report(s) available for route airports (last 6 hours)</td></tr>"""
         
+        # Add NOTAMs section to fallback
+        notam_section = ""
+        if notams:
+            notam_section = f"""
+    <tr><th>NOTAMs</th><td>{len(notams)} Notice(s) to Airmen active for route airports</td></tr>"""
+        
         return f"""
 <div class="briefing-content">
   <table class="briefing-table">
     <tr><th>Route Summary</th><td>Weather briefing for {route}. Conditions appear favorable for flight operations.</td></tr>
-    <tr><th>Recommendations</th><td>Monitor weather conditions and maintain standard flight procedures.</td></tr>{pirep_section}
+    <tr><th>Recommendations</th><td>Monitor weather conditions and maintain standard flight procedures.</td></tr>{pirep_section}{notam_section}
   </table>
   
   <div class="per-airport-section">
@@ -200,6 +244,40 @@ def generate_summary_with_gemini(metars, tafs, pireps=None):
         
         pirep_data = f"\n\nRECENT PIREPs (Last 6 Hours):\n" + "\n".join(pirep_texts)
 
+    # Add NOTAMs data to weather information
+    notam_data = ""
+    if notams:
+        notam_texts = []
+        for notam in notams:
+            icao = notam.get('icao_code', '')
+            notam_type = notam.get('notam_type', '')
+            description = notam.get('description', '')
+            start_time = notam.get('start_time', '')
+            end_time = notam.get('end_time', '')
+            
+            # Format time for display
+            try:
+                from datetime import datetime
+                if start_time:
+                    start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                    start_display = start_dt.strftime('%Y-%m-%d %H:%M UTC')
+                else:
+                    start_display = start_time
+                    
+                if end_time:
+                    end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                    end_display = end_dt.strftime('%Y-%m-%d %H:%M UTC')
+                else:
+                    end_display = end_time
+            except:
+                start_display = start_time
+                end_display = end_time
+            
+            notam_entry = f"{icao} - {notam_type}: {description} (Active: {start_display} to {end_display})"
+            notam_texts.append(notam_entry)
+        
+        notam_data = f"\n\nACTIVE NOTAMs:\n" + "\n".join(notam_texts)
+
     # Updated prompt with table format and collapsible per-airport section
     prompt = f"""
 You are an expert aviation weather briefer. Audience pilot profile: '{pilot_profile}'.
@@ -210,6 +288,7 @@ Task:
 - Per-airport summary: **exactly 1 line per ICAO**, include only if conditions are extreme 
   (low vis, strong winds, storms, icing, turbulence, etc.).
 - PIREP Integration: If PIREPs are available, add a "Recent PIREPs" row to the table and mention significant pilot reports in your analysis.
+- NOTAMs Integration: If NOTAMs are available, add a "NOTAMs" row to the table and highlight critical operational restrictions.
 - Keep plain language, avoid unnecessary details.
 
 HTML Output Structure:
@@ -218,6 +297,7 @@ HTML Output Structure:
     <tr><th>Route Summary</th><td>Brief overall conditions for the route</td></tr>
     <tr><th>Recommendations</th><td>Speed, altitude, or diversion advice</td></tr>
     {f'<tr><th>Recent PIREPs</th><td>Highlight significant pilot reports from the last 6 hours</td></tr>' if pireps else ''}
+    {f'<tr><th>NOTAMs</th><td>Critical operational restrictions and closures</td></tr>' if notams else ''}
   </table>
 
   <div class="per-airport-section">
@@ -235,7 +315,7 @@ AIRPORT DIRECTORY:
 {airport_directory}
 
 RAW WEATHER DATA START
-{weather_data}{pirep_data}
+{weather_data}{pirep_data}{notam_data}
 RAW WEATHER DATA END
 """
 
@@ -254,11 +334,17 @@ RAW WEATHER DATA END
             pirep_section = f"""
     <tr><th>Recent PIREPs</th><td>{len(pireps)} pilot report(s) available for route airports (last 6 hours)</td></tr>"""
         
+        # Add NOTAMs section to error fallback
+        notam_section = ""
+        if notams:
+            notam_section = f"""
+    <tr><th>NOTAMs</th><td>{len(notams)} Notice(s) to Airmen active for route airports</td></tr>"""
+        
         return f"""
 <div class="briefing-content">
   <table class="briefing-table">
     <tr><th>Route Summary</th><td>Weather briefing for {route}. Please check official weather sources for current conditions.</td></tr>
-    <tr><th>Recommendations</th><td>Monitor weather conditions and maintain standard flight procedures.</td></tr>{pirep_section}
+    <tr><th>Recommendations</th><td>Monitor weather conditions and maintain standard flight procedures.</td></tr>{pirep_section}{notam_section}
   </table>
   
   <div class="per-airport-section">
@@ -284,6 +370,8 @@ def home():
 def get_briefing():
     """The main API endpoint to get weather data and the AI summary."""
     icao_codes_str = request.args.get('codes', '')
+    include_notams = request.args.get('include_notams', 'false').lower() == 'true'
+    
     if not icao_codes_str:
         return jsonify({"error": "No ICAO codes provided"}), 400
 
@@ -297,14 +385,20 @@ def get_briefing():
     # Fetch recent PIREPs for the route
     pirep_reports = get_recent_pireps(icao_codes)
     
-    # Generate summary with PIREP integration
-    summary = generate_summary_with_gemini(metar_reports, taf_reports, pirep_reports)
+    # Fetch NOTAMs if requested
+    notam_reports = []
+    if include_notams:
+        notam_reports = get_notams_data(icao_codes)
+    
+    # Generate summary with PIREP and NOTAM integration
+    summary = generate_summary_with_gemini(metar_reports, taf_reports, pirep_reports, notam_reports)
 
     response_data = {
         "summary": summary,
         "metar_reports": metar_reports,
         "taf_reports": taf_reports,
-        "pirep_reports": pirep_reports
+        "pirep_reports": pirep_reports,
+        "notam_reports": notam_reports
     }
     
     return jsonify(response_data)
