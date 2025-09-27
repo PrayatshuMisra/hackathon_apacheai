@@ -287,8 +287,20 @@ function renderBriefing() {
           <div class="section-title flex items-center justify-between">
             <h3 class="text-lg font-semibold">Primary Route Briefing</h3>
             <span class="flex items-center text-xs font-medium text-red-600">
-              <span class="w-2 h-2 bg-red-600 rounded-full mr-1"></span>Live
-            </span>
+  <span 
+    class="w-2 h-2 bg-red-600 rounded-full mr-1" 
+    style="animation: blink 1s infinite;"
+  ></span>
+  Live
+</span>
+
+<style>
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+</style>
+
           </div>
           <div class="p-3" style="color: #ffffff;">${summary}</div>
           
@@ -319,7 +331,7 @@ function renderBriefing() {
                 <div class="text-lg font-bold" style="color: #ffffff;">${performance.totalTime.hours}h ${performance.totalTime.minutes}m</div>
               </div>
               <div>
-                <div class="text-sm text-gray-400">Fuel Burn</div>
+                <div class="text-sm text-gray-400">Fuel Burnt</div>
                 <div class="text-lg font-bold" style="color: #ffffff;">${performance.totalFuel.toFixed(0)} ${performance.aircraft.fuelUnit}</div>
               </div>
             </div>
@@ -1873,9 +1885,9 @@ function splitArcAtAntimeridian(points) {
 
 // ---------- NEW FEATURE: Performance Calculations ----------
 const aircraftPerformanceData = {
-  'C172': { name: 'Cessna 172', cruiseTas: 120, fuelBurn: 8, fuelUnit: 'GPH' },
-  'B737': { name: 'Boeing 737', cruiseTas: 450, fuelBurn: 5000, fuelUnit: 'PPH' },
-  'A320': { name: 'Airbus A320', cruiseTas: 470, fuelBurn: 5300, fuelUnit: 'PPH' },
+  'C172': { name: 'Cessna 172', cruiseTas: 120, fuelBurn: 8, fuelUnit: 'G' },
+  'B737': { name: 'Boeing 737', cruiseTas: 450, fuelBurn: 5000, fuelUnit: 'lb' },
+  'A320': { name: 'Airbus A320', cruiseTas: 470, fuelBurn: 5300, fuelUnit: 'lb' },
 };
 
 function haversineDistance(coords1, coords2) {
