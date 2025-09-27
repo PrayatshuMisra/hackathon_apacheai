@@ -637,32 +637,13 @@ function showGlobalLoader(show) {
           
           <h3 class="text-2xl font-bold mb-4 text-lime-400 font-sans">Preparing Your Flight Briefing</h3>
           
-          <div id="loader-fact" class="min-h-16 mb-6 px-6 py-4 bg-gray-900/50 rounded-xl text-sm text-gray-200 transition-opacity duration-500">
-            Loading aviation insights...
-          </div>
+
           
           <div class="w-full max-w-md h-2 bg-gray-800 rounded-full overflow-hidden mx-auto mb-2">
             <div id="progress-bar" class="h-full bg-gradient-to-r from-lime-400 to-cyan-400 transition-all duration-500 ease-out" style="width: 0%"></div>
           </div>
           
-          <div class="flex justify-center space-x-4 mt-6">
-            <button id="next-fact" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-200 transition-all hover:scale-105 active:scale-95">
-              <span class="flex items-center">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                </svg>
-                Next Fact
-              </span>
-            </button>
-            <button id="toggle-animation" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-200 transition-all hover:scale-105 active:scale-95">
-              <span class="flex items-center">
-                <svg id="animation-icon" class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span id="animation-text">Pause</span>
-              </span>
-            </button>
-          </div>
+
         </div>
       `;
 
@@ -673,23 +654,6 @@ function showGlobalLoader(show) {
       const animationIcon = document.getElementById('animation-icon');
       const animationText = document.getElementById('animation-text');
 
-      nextFactBtn?.addEventListener('click', cycleFact);
-      toggleAnimBtn?.addEventListener('click', () => {
-        if (flightAnim.paused) {
-          flightAnim.beginElement();
-          animationIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />';
-          animationText.textContent = 'Pause';
-        } else {
-          flightAnim.pauseAnimations();
-          animationIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />';
-          animationText.textContent = 'Resume';
-        }
-      });
-
-      // Start cycling facts
-      cycleFact();
-      loaderAnimation = setInterval(cycleFact, 8000);
-
       // Simulate progress
       simulateProgress();
     }
@@ -698,10 +662,7 @@ function showGlobalLoader(show) {
     toggleFaviconSpinner(true);
   } else {
     // Clean up when hiding
-    if (loaderAnimation) {
-      clearInterval(loaderAnimation);
-      loaderAnimation = null;
-    }
+    // ...existing code...
     loader.style.display = 'none';
     toggleFaviconSpinner(false);
   }
@@ -737,7 +698,7 @@ function simulateProgress() {
     { percent: 30, text: 'Fetching weather data' },
     { percent: 45, text: 'Analyzing flight conditions' },
     { percent: 60, text: 'Calculating optimal route' },
-    { percent: 75, text: 'Compiling NOTAMs' },
+    { percent: 75, text: 'Compiling NOTAMs and SIGMETs' },
     { percent: 85, text: 'Finalizing briefing' },
     { percent: 95, text: 'Almost there' }
   ];
