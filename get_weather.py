@@ -1,9 +1,43 @@
 import os
+import sys
 import requests
 import google.generativeai as genai
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_file
 from dotenv import load_dotenv
 import datetime
+import pdfkit
+import tempfile
+import platform
+
+# Configuration for wkhtmltopdf
+def configure_wkhtmltopdf():
+    """Configure wkhtmltopdf path based on platform"""
+    system = platform.system().lower()
+    if system == 'windows':
+        # Default installation paths for Windows
+        possible_paths = [
+            r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe',
+            r'C:\Program Files (x86)\wkhtmltopdf\bin\wkhtmltopdf.exe'
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                return path
+        
+        # If not found, provide installation instructions
+        print("""
+wkhtmltopdf is not installed. Please install it to enable PDF generation:
+1. Download the installer from: https://wkhtmltopdf.org/downloads.html
+2. Run the installer and follow the installation steps
+3. Restart the application after installation
+
+For Windows 64-bit, download: https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-2/wkhtmltox-0.12.6.1-2.msi
+""")
+        return None
+    else:
+        return 'wkhtmltopdf'  # Assume it's in PATH for Unix-like systems
+
+# Configure wkhtmltopdf path
+WKHTMLTOPDF_PATH = configure_wkhtmltopdf()
 
 # Supabase REST config (server-side)
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
@@ -129,6 +163,9 @@ app = Flask(
     template_folder='aura',
     static_url_path=''  # allow "/styles.css" and "/app.js" paths to work
 )
+
+# Add templates directory for PDF generation
+app.jinja_loader.searchpath.append(os.path.join(os.path.dirname(__file__), 'templates'))
 
 # Configure the Gemini API
 try:
@@ -404,6 +441,99 @@ def get_briefing():
     return jsonify(response_data)
 
 # --- Main Execution ---
+
+@app.route('/download-briefing')
+def download_briefing():
+    """Generate and download a PDF version of the weather briefing."""
+    try:
+        # Get the same data as the briefing endpoint
+        icao_codes_str = request.args.get('codes', '')
+        include_notams = request.args.get('include_notams', 'false').lower() == 'true'
+        
+        if not icao_codes_str:
+            return jsonify({"error": "No ICAO codes provided"}), 400
+
+        # Parse ICAO codes
+        icao_codes = [code.strip().upper() for code in icao_codes_str.split(',') if code.strip()]
+        
+        # Fetch weather data
+        metar_reports = get_metar_data(icao_codes_str)
+        taf_reports = get_taf_data(icao_codes_str)
+        pirep_reports = get_recent_pireps(icao_codes)
+        notam_reports = []
+        if include_notams:
+            notam_reports = get_notams_data(icao_codes)
+        
+        # Generate summary
+        summary = generate_summary_with_gemini(metar_reports, taf_reports, pirep_reports, notam_reports)
+
+        # Prepare airport data for the template
+        airports = []
+        for i, icao in enumerate(icao_codes):
+            airport = {
+                'icao': icao,
+                'metar': metar_reports[i].get('rawOb', 'No METAR available') if i < len(metar_reports) else 'No METAR available',
+                'taf': taf_reports[i].get('rawTAF', '') if i < len(taf_reports) else ''
+            }
+            airports.append(airport)
+
+        # Render the HTML template
+        html = render_template(
+            'briefing_template.html',
+            generated_time=datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC'),
+            briefing_content=summary,
+            airports=airports
+        )
+
+        # Check if wkhtmltopdf is configured
+        if not WKHTMLTOPDF_PATH:
+            return jsonify({
+                "error": "PDF generation is not available. Please install wkhtmltopdf first.",
+                "instructions": """
+                    Please install wkhtmltopdf to enable PDF generation:
+                    1. Download from: https://wkhtmltopdf.org/downloads.html
+                    2. Run the installer
+                    3. Restart the application
+                """
+            }), 503
+
+        # Create a temporary file for the PDF
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+            try:
+                # Configure pdfkit with the wkhtmltopdf path
+                config = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_PATH)
+                
+                # Generate PDF using pdfkit
+                pdfkit.from_string(
+                    html, 
+                    tmp.name,
+                    configuration=config,
+                    options={
+                        'encoding': 'UTF-8',
+                        'page-size': 'Letter',
+                        'margin-top': '20mm',
+                        'margin-right': '20mm',
+                        'margin-bottom': '20mm',
+                        'margin-left': '20mm',
+                        'enable-local-file-access': None
+                    }
+                )
+                
+                # Send the PDF file
+                return send_file(
+                    tmp.name,
+                    as_attachment=True,
+                    download_name=f"weather-briefing-{'-'.join(icao_codes)}.pdf",
+                    mimetype='application/pdf'
+                )
+            except Exception as e:
+                return jsonify({
+                    "error": f"Failed to generate PDF: {str(e)}",
+                    "instructions": "If you just installed wkhtmltopdf, please restart the application."
+                }), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/convert-to-pirep', methods=['POST'])
 def convert_to_pirep():

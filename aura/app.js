@@ -98,16 +98,18 @@ function render() {
 
   // Set the content
   app.innerHTML = content;
-  
+
   // Attach event listeners
   attachEvents();
-  
+
   // Initialize components after a small delay to ensure DOM is ready
   setTimeout(() => {
     if (AppState.route === '/plan') {
       setupPirepConversion();
     } else if (AppState.route === '/briefing') {
       initMapIfData();
+      // New feature initialization
+      analyzeAndSuggestRoutes();
     }
   }, 10);
 }
@@ -147,10 +149,10 @@ function renderLanding() {
     </section>
 
     <section class="mt-14 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 w-full max-w-6xl">
-      ${featureCard('Unified Threat Score','Condenses conditions into a single actionable index.','⚠️')}
-      ${featureCard('Predictive Hazard Alerts','Proactive heads-up on convective, icing, and wind shear.','🌩️')}
-      ${featureCard('Natural Language Briefings','Plain-English summaries for your route.','🗣️')}
-      ${featureCard('Dynamic Anomaly Detection','Spots abnormal trends and rapid deteriorations.','📈')}
+      ${featureCard('Performance Calculations', 'Calculates fuel, time, and optimal altitudes considering weather.', '⛽')}
+      ${featureCard('Alternative Route Suggestions', 'Suggests safer routes based on real-time weather conditions.', '↪️')}
+      ${featureCard('Natural Language Briefings', 'Plain-English summaries for your route.', '🗣️')}
+      ${featureCard('Dynamic Anomaly Detection', 'Spots abnormal trends and rapid deteriorations.', '📈')}
     </section>
 
     <div class="mt-16 text-sm" style="color: #ffffff;">MVP demo – Map and ML features are placeholders.</div>
@@ -164,12 +166,23 @@ function renderFlightPlan() {
       <div class="card p-6 mb-6">
         <h2 class="text-2xl font-bold" style="color: var(--apache-green);">Enter Flight Plan</h2>
         <p class="mt-1 mb-4" style="color: #ffffff;">Example: KRIC KJFK KORD</p>
-        <div class="flex gap-3">
+        <div class="flex flex-col md:flex-row gap-3">
           <input id="route-input" class="flex-1 rounded-xl bg-white/10 border border-white/20 focus:border-indigo-400 focus:outline-none px-4 py-3 placeholder:text-gray-400" placeholder="ICAO route (e.g., KRIC KJFK KORD)" />
+          <div class="relative flex-1">
+  <select id="aircraft-type" class="w-full appearance-none rounded-xl bg-black/80 border border-white/20 hover:border-lime-400/50 focus:border-lime-400 focus:ring-2 focus:ring-lime-400/20 focus:outline-none px-4 py-3 pr-10 text-lime-400 text-sm transition-colors cursor-pointer">
+    <option value="C172" class="bg-black text-lime-400">Cessna 172</option>
+    <option value="B737" class="bg-black text-lime-400">Boeing 737</option>
+    <option value="A320" class="bg-black text-lime-400">Airbus A320</option>
+  </select>
+  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-lime-400">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+    </svg>
+  </div>
+</div>
           <button id="btn-generate" class="btn-shimmer glow-hover rounded-xl px-5 py-3 font-medium apache-green-btn">Generate Briefing</button>
         </div>
         
-        <!-- NOTAMs Toggle Option -->
         <div class="mt-4 flex items-center justify-between">
           <div class="flex items-center gap-3">
             <label class="inline-flex items-center cursor-pointer">
@@ -184,7 +197,6 @@ function renderFlightPlan() {
         </div>
       </div>
       
-      <!-- PIREP Conversion Section -->
       <div class="card p-6">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-xl font-bold" style="color: var(--apache-green);">Convert PIREP to Standard Format</h2>
@@ -197,7 +209,6 @@ function renderFlightPlan() {
         
         <div id="pirep-container" class="hidden">
           <div class="flex flex-col space-y-4">
-            <!-- Mandatory Fields -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label for="problem-type" class="block text-sm font-medium mb-2" style="color: var(--apache-green);">Type of Problem *</label>
@@ -220,7 +231,6 @@ function renderFlightPlan() {
               </div>
             </div>
             
-            <!-- Description -->
             <div>
               <label for="pirep-input" class="block text-sm font-medium mb-2" style="color: var(--apache-green);">Description</label>
               <textarea 
@@ -237,7 +247,6 @@ function renderFlightPlan() {
               Generate PIREP
             </button>
             
-            <!-- Success Message -->
             <div id="pirep-success" class="hidden p-4 bg-green-900/20 border border-green-500 rounded-lg">
               <div class="flex items-center gap-2">
                 <svg class="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
@@ -269,23 +278,55 @@ function renderFlightPlan() {
 
 function renderBriefing() {
   const summary = AppState.data?.summary || 'No data available.';
-  const legs = AppState.data?.legs || [];
+  const performance = calculatePerformance(AppState.data.legs, AppState.data.aircraftType);
   return `
   <main class="route min-h-screen px-6 py-10">
     <div class="max-w-6xl mx-auto grid grid-cols-1 gap-6">
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
         <section class="dialog border-hacker">
           <div class="section-title flex items-center justify-between">
-            <h3 class="text-lg font-semibold">Route Summary</h3>
+            <h3 class="text-lg font-semibold">Primary Route Briefing</h3>
             <span class="flex items-center text-xs font-medium text-red-600">
-    <span class="w-2 h-2 bg-red-600 rounded-full mr-1"></span>
-    Live
-  </span>
+              <span class="w-2 h-2 bg-red-600 rounded-full mr-1"></span>Live
+            </span>
           </div>
           <div class="p-3" style="color: #ffffff;">${summary}</div>
+          
+          <div class="p-3 flex items-center gap-3 justify-end">
+            <button id="btn-download-pdf" class="btn-shimmer glow-hover rounded-lg px-4 py-2 font-medium apache-green-btn inline-flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+              Download PDF
+            </button>
+            <button id="btn-share" class="btn-shimmer glow-hover rounded-lg px-4 py-2 font-medium apache-green-btn inline-flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
+              </svg>
+              Share
+            </button>
+          </div>
+          
+          <div class="p-3 mt-2">
+            <h4 class="font-semibold text-md mb-2" style="color: var(--apache-green);">Performance Estimate (${performance.aircraft.name})</h4>
+            <div class="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <div class="text-sm text-gray-400">Total Distance</div>
+                <div class="text-lg font-bold" style="color: #ffffff;">${performance.totalDistance.toFixed(0)} NM</div>
+              </div>
+              <div>
+                <div class="text-sm text-gray-400">Time Enroute</div>
+                <div class="text-lg font-bold" style="color: #ffffff;">${performance.totalTime.hours}h ${performance.totalTime.minutes}m</div>
+              </div>
+              <div>
+                <div class="text-sm text-gray-400">Fuel Burn</div>
+                <div class="text-lg font-bold" style="color: #ffffff;">${performance.totalFuel.toFixed(0)} ${performance.aircraft.fuelUnit}</div>
+              </div>
+            </div>
+          </div>
 
           <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            ${legs.map(renderAirportCard).join('')}
+            ${AppState.data.legs.map(renderAirportCard).join('')}
           </div>
         </section>
 
@@ -295,14 +336,20 @@ function renderBriefing() {
         </section>
       </div>
 
-      <!-- Weather Parameter Graphs -->
+      <section id="alternative-routes-section" class="dialog border-hacker hidden">
+        <div class="section-title">
+          <h3 class="text-lg font-semibold">Alternative Route Suggestion</h3>
+        </div>
+        <div id="alternative-routes-content" class="p-4">
+          </div>
+      </section>
+
       <section class="dialog border-hacker">
         <div class="section-title">
           <h3 class="text-lg font-semibold">Weather Parameters</h3>
         </div>
         <div id="weather-graphs" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4">
-          <!-- Graphs will be inserted here by JavaScript -->
-        </div>
+          </div>
       </section>
 
       <div class="flex items-center justify-between" style="color: #ffffff;">
@@ -351,43 +398,120 @@ function attachEvents() {
     navigate('/plan');
   });
 
+  // Add download PDF button handler
+  const downloadPdf = document.getElementById('btn-download-pdf');
+  if (downloadPdf) {
+    downloadPdf.addEventListener('click', async () => {
+      try {
+        const params = new URLSearchParams({ 
+          codes: AppState.data.legs.map(leg => leg.icao).join(','),
+          include_notams: false // Add this if needed
+        });
+        
+        // Create a loading state
+        downloadPdf.disabled = true;
+        downloadPdf.innerHTML = `
+          <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Generating PDF...
+        `;
+        
+        // Trigger the download
+        window.location.href = `/download-briefing?${params.toString()}`;
+        
+        // Reset button state after a delay
+        setTimeout(() => {
+          downloadPdf.disabled = false;
+          downloadPdf.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+            Download PDF
+          `;
+        }, 2000);
+      } catch (error) {
+        console.error('Failed to download PDF:', error);
+        alert('Failed to generate PDF. Please try again.');
+      }
+    });
+  }
+
+  // Add share button handler
+  const shareBtn = document.getElementById('btn-share');
+  if (shareBtn) {
+    shareBtn.addEventListener('click', async () => {
+      try {
+        const title = 'Weather Briefing';
+        const url = window.location.href;
+        
+        if (navigator.share) {
+          await navigator.share({
+            title,
+            url
+          });
+        } else {
+          await navigator.clipboard.writeText(url);
+          
+          // Show feedback
+          const originalText = shareBtn.innerHTML;
+          shareBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+            </svg>
+            Copied!
+          `;
+          setTimeout(() => {
+            shareBtn.innerHTML = originalText;
+          }, 2000);
+        }
+      } catch (error) {
+        console.error('Error sharing:', error);
+        alert('Failed to share. Please try copying the URL manually.');
+      }
+    });
+  };
+
   const generate = document.getElementById('btn-generate');
   if (generate) generate.addEventListener('click', async () => {
     const val = /** @type {HTMLInputElement} */(document.getElementById('route-input')).value.trim();
+    const aircraftType = /** @type {HTMLSelectElement} */(document.getElementById('aircraft-type')).value;
     if (!val) return;
-    
+
     // Check if NOTAMs toggle is enabled
     const notamsToggle = /** @type {HTMLInputElement} */(document.getElementById('toggle-notams'));
     const includeNotams = notamsToggle ? notamsToggle.checked : false;
-    
+
     try {
       showGlobalLoader(true);
       toggleFaviconSpinner(true);
-      const params = new URLSearchParams({ 
+      const params = new URLSearchParams({
         codes: val.replace(/\s+/g, ','),
         include_notams: includeNotams.toString()
       });
       const resp = await fetch(`/briefing?${params.toString()}`);
       if (!resp.ok) throw new Error('Failed to fetch briefing');
       const data = await resp.json();
-      
+
       // Store the raw METAR data for each airport
       const legsWithData = mapReportsToLegs(data.metar_reports || [], data.taf_reports || []);
-      
+
       // Add raw METAR data to each leg for the graphs
       legsWithData.forEach((leg, index) => {
         if (data.metar_reports && data.metar_reports[index]) {
           leg.metar = data.metar_reports[index];
         }
       });
-      
+
       AppState.data = {
         summary: data.summary,
-        legs: legsWithData
+        legs: legsWithData,
+        aircraftType: aircraftType // Store selected aircraft
       };
-      
+
       navigate('/briefing');
-      
+
       // Small delay to ensure the DOM is ready
       setTimeout(createWeatherGraphs, 100);
     } catch (err) {
@@ -436,7 +560,7 @@ function mapReportsToLegs(metarReports = [], tafReports = []) {
 
 function deriveFlightCategory(metar) {
   const fltcat = (metar && metar.fltcat) || '';
-  if (['VFR','MVFR','IFR','LIFR'].includes(fltcat)) return fltcat;
+  if (['VFR', 'MVFR', 'IFR', 'LIFR'].includes(fltcat)) return fltcat;
   return 'VFR';
 }
 
@@ -451,10 +575,205 @@ function extractTafHighlights(taf) {
 }
 
 // ---------- Global loader + favicon spinner ----------
+// Aviation facts to show during loading
+const AVIATION_FACTS = [
+  "The Boeing 747 can carry about 63,000 gallons of fuel, which is roughly 380,000 pounds!",
+  "The world's busiest airport by passenger traffic is Hartsfield-Jackson Atlanta International Airport (KATL).",
+  "The shortest scheduled passenger flight is just 1.7 miles between Westray and Papa Westray in Scotland.",
+  "Aircraft tires are inflated to about 200 psi, which is 6 times the pressure in a car tire.",
+  "The contrails left by airplanes are actually clouds formed from water vapor in the exhaust.",
+  "The fastest commercial airliner was the Concorde, which could fly at Mach 2.04 (1,354 mph)."
+];
+
+let currentFactIndex = 0;
+let loaderAnimation = null;
+
 function showGlobalLoader(show) {
-  const el = document.getElementById('global-loader');
-  if (!el) return;
-  el.style.display = show ? 'flex' : 'none';
+  const loader = document.getElementById('global-loader');
+  if (!loader) return;
+
+  if (show) {
+    // Create loader content if it doesn't exist
+    if (!document.getElementById('loader-content')) {
+      loader.innerHTML = `
+        <div id="loader-content" class="text-center p-6 max-w-2xl mx-auto">
+          <div class="relative w-full h-64 mb-6">
+            <div class="absolute inset-0 flex items-center justify-center">
+              <div class="w-64 h-64 rounded-full border-4 border-lime-400 border-opacity-20 relative">
+                <div class="absolute top-0 left-1/2 w-1 h-8 bg-lime-400 transform -translate-x-1/2 -translate-y-1/2"></div>
+                <div class="absolute top-1/2 right-0 w-8 h-1 bg-lime-400 transform translate-x-1/2 -translate-y-1/2"></div>
+                <div class="absolute bottom-0 left-1/2 w-1 h-8 bg-lime-400 transform -translate-x-1/2 translate-y-1/2"></div>
+                <div class="absolute top-1/2 left-0 w-8 h-1 bg-lime-400 transform -translate-x-1/2 -translate-y-1/2"></div>
+              </div>
+            </div>
+            
+            <svg id="flight-path" viewBox="0 0 400 300" class="w-full h-full absolute top-0 left-0">
+              <path id="flight-route" d="M50,150 Q200,50 350,150 T650,150" fill="none" stroke="rgba(0,255,133,0.2)" stroke-width="2" />
+              <g id="airplane" transform="translate(-20,0)">
+                <path d="M0,0 L40,0 L50,10 L60,0 L100,0 L80,20 L90,30 L60,25 L50,40 L40,25 L10,30 Z" 
+                      fill="#00ff85" 
+                      transform="rotate(0) scale(0.8)" 
+                      transform-origin="50% 50%">
+                  <animateMotion 
+                    id="flight-animation"
+                    dur="4s" 
+                    repeatCount="indefinite" 
+                    path="M50,150 Q200,50 350,150 T650,150"
+                    rotate="auto"
+                  />
+                </path>
+              </g>
+            </svg>
+            
+            <div class="absolute bottom-0 left-0 right-0 text-center">
+              <div class="inline-block px-4 py-2 bg-gray-900/80 backdrop-blur-sm rounded-full">
+                <div class="text-lime-400 text-sm font-mono">
+                  <span id="progress-text">Initializing systems</span>
+                  <span id="progress-dots">...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <h3 class="text-2xl font-bold mb-4 text-lime-400 font-sans">Preparing Your Flight Briefing</h3>
+          
+          <div id="loader-fact" class="min-h-16 mb-6 px-6 py-4 bg-gray-900/50 rounded-xl text-sm text-gray-200 transition-opacity duration-500">
+            Loading aviation insights...
+          </div>
+          
+          <div class="w-full max-w-md h-2 bg-gray-800 rounded-full overflow-hidden mx-auto mb-2">
+            <div id="progress-bar" class="h-full bg-gradient-to-r from-lime-400 to-cyan-400 transition-all duration-500 ease-out" style="width: 0%"></div>
+          </div>
+          
+          <div class="flex justify-center space-x-4 mt-6">
+            <button id="next-fact" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-200 transition-all hover:scale-105 active:scale-95">
+              <span class="flex items-center">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
+                Next Fact
+              </span>
+            </button>
+            <button id="toggle-animation" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-200 transition-all hover:scale-105 active:scale-95">
+              <span class="flex items-center">
+                <svg id="animation-icon" class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span id="animation-text">Pause</span>
+              </span>
+            </button>
+          </div>
+        </div>
+      `;
+
+      // Set up interactive elements
+      const nextFactBtn = document.getElementById('next-fact');
+      const toggleAnimBtn = document.getElementById('toggle-animation');
+      const flightAnim = document.querySelector('#flight-animation');
+      const animationIcon = document.getElementById('animation-icon');
+      const animationText = document.getElementById('animation-text');
+
+      nextFactBtn?.addEventListener('click', cycleFact);
+      toggleAnimBtn?.addEventListener('click', () => {
+        if (flightAnim.paused) {
+          flightAnim.beginElement();
+          animationIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />';
+          animationText.textContent = 'Pause';
+        } else {
+          flightAnim.pauseAnimations();
+          animationIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />';
+          animationText.textContent = 'Resume';
+        }
+      });
+
+      // Start cycling facts
+      cycleFact();
+      loaderAnimation = setInterval(cycleFact, 8000);
+
+      // Simulate progress
+      simulateProgress();
+    }
+
+    loader.style.display = 'flex';
+    toggleFaviconSpinner(true);
+  } else {
+    // Clean up when hiding
+    if (loaderAnimation) {
+      clearInterval(loaderAnimation);
+      loaderAnimation = null;
+    }
+    loader.style.display = 'none';
+    toggleFaviconSpinner(false);
+  }
+}
+
+function cycleFact() {
+  const factElement = document.getElementById('loader-fact');
+  if (!factElement) return;
+
+  // Fade out
+  factElement.style.opacity = '0';
+
+  setTimeout(() => {
+    // Update fact
+    currentFactIndex = (currentFactIndex + 1) % AVIATION_FACTS.length;
+    factElement.textContent = AVIATION_FACTS[currentFactIndex];
+
+    // Fade in
+    setTimeout(() => {
+      factElement.style.transition = 'opacity 0.5s ease-in-out';
+      factElement.style.opacity = '1';
+    }, 50);
+  }, 300);
+}
+
+function simulateProgress() {
+  const progressBar = document.getElementById('progress-bar');
+  const progressText = document.getElementById('progress-text');
+  const progressDots = document.getElementById('progress-dots');
+
+  const progressStages = [
+    { percent: 15, text: 'Initializing systems' },
+    { percent: 30, text: 'Fetching weather data' },
+    { percent: 45, text: 'Analyzing flight conditions' },
+    { percent: 60, text: 'Calculating optimal route' },
+    { percent: 75, text: 'Compiling NOTAMs' },
+    { percent: 85, text: 'Finalizing briefing' },
+    { percent: 95, text: 'Almost there' }
+  ];
+
+  let currentStage = 0;
+  let dots = 0;
+
+  // Animate dots
+  const dotsInterval = setInterval(() => {
+    dots = (dots + 1) % 4;
+    if (progressDots) {
+      progressDots.textContent = '.'.repeat(dots) + ' '.repeat(3 - dots);
+    }
+  }, 300);
+
+  const progressInterval = setInterval(() => {
+    if (currentStage >= progressStages.length) {
+      // Don't go to 100% automatically - we'll complete it when loading is done
+      return;
+    }
+
+    const stage = progressStages[currentStage];
+    if (progressBar) progressBar.style.width = `${stage.percent}%`;
+    if (progressText) progressText.textContent = stage.text;
+
+    currentStage++;
+  }, 1500);
+
+  // Clean up intervals when loader is hidden
+  return () => {
+    clearInterval(progressInterval);
+    clearInterval(dotsInterval);
+    if (progressBar) progressBar.style.width = '100%';
+    if (progressText) progressText.textContent = 'Complete!';
+    if (progressDots) progressDots.textContent = '';
+  };
 }
 
 const FAVICON_IDLE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23000000'/%3E%3Cpath d='M8 18c4-6 12-6 16 0' stroke='%2300ff85' stroke-width='2' fill='none'/%3E%3Ccircle cx='16' cy='14' r='3' fill='%2300ff85'/%3E%3C/svg%3E";
@@ -470,7 +789,7 @@ function togglePerAirport() {
   const content = document.querySelector('.per-airport-content');
   const btn = document.querySelector('.read-more-btn');
   if (!content || !btn) return;
-  
+
   const isHidden = content.style.display === 'none';
   content.style.display = isHidden ? 'block' : 'none';
   btn.textContent = isHidden ? 'Read Less <<' : 'Read More >>';
@@ -489,7 +808,7 @@ function setupPirepConversion() {
   const pirepSuccess = document.getElementById('pirep-success');
   const copyBtn = document.getElementById('copy-pirep-btn');
   const togglePirep = document.getElementById('toggle-pirep');
-  
+
   // Mandatory fields
   const problemType = document.getElementById('problem-type');
   const location = document.getElementById('location');
@@ -546,12 +865,12 @@ function setupPirepConversion() {
     try {
       const txt = String(location.value || '').toUpperCase();
       const matches = txt.match(/[A-Z]{4}/g) || [];
-      const skip = new Set(['NORTH','SOUTH','EAST','WEST']);
+      const skip = new Set(['NORTH', 'SOUTH', 'EAST', 'WEST']);
       for (let i = matches.length - 1; i >= 0; i--) {
         const candidate = matches[i];
         if (!skip.has(candidate)) { icaoGuess = candidate; break; }
       }
-    } catch {}
+    } catch { }
     const pirepData = {
       text: textDescription, // This is what the API expects
       problemType: problemType.value,
@@ -589,10 +908,10 @@ function setupPirepConversion() {
       pirepResult.classList.remove('hidden');
 
       // Client-side insert disabled; server now stores the PIREP.
-      
+
       // Show success message
       pirepSuccess.classList.remove('hidden');
-      
+
       // Scroll to show the result
       pirepResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (error) {
@@ -615,7 +934,7 @@ function setupPirepConversion() {
       const originalText = copyBtn.innerHTML;
       copyBtn.innerHTML = '✓ Copied!';
       copyBtn.classList.add('text-green-400');
-      
+
       setTimeout(() => {
         copyBtn.innerHTML = originalText;
         copyBtn.classList.remove('text-green-400');
@@ -638,12 +957,12 @@ function setupPirepConversion() {
 document.addEventListener('DOMContentLoaded', () => {
   // Initial render
   render();
-  
+
   // Initialize chart instances array if it doesn't exist
   if (!window.chartInstances) {
     window.chartInstances = [];
   }
-  
+
   // Handle window resize to update charts
   let resizeTimer;
   window.addEventListener('resize', () => {
@@ -661,7 +980,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }, 250);
   });
-  
+
   // If we're on the briefing page, create weather graphs
   if (window.location.pathname === '/briefing' || window.location.hash === '#briefing') {
     console.log('Briefing page loaded, initializing graphs...');
@@ -686,8 +1005,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // Create new charts with a small delay to ensure DOM is ready
     setTimeout(createWeatherGraphs, 500);
-  }  
-  
+  }
+
   if (window.location.pathname === '/plan' || window.location.pathname.endsWith('index.html')) {
     // Small delay to ensure all elements are in the DOM
     setTimeout(() => {
@@ -708,10 +1027,10 @@ function createWeatherGraphs() {
     console.error('No legs data available');
     return;
   }
-  
+
   // Clear the container
   container.innerHTML = '';
-  
+
   // Debug: Log the actual data structure
   console.log('Full legs data:', AppState.data.legs);
   AppState.data.legs.forEach((leg, i) => {
@@ -720,32 +1039,32 @@ function createWeatherGraphs() {
       console.log(`  METAR data:`, leg.metar);
     }
   });
-  
+
   // Define the weather parameters we want to visualize with robust extractors
   const weatherParams = [
-    { 
-      key: 'temperature', 
-      label: 'Temperature', 
+    {
+      key: 'temperature',
+      label: 'Temperature',
       unit: '°C',
       chartType: 'line', // Use line chart for temperature
       extractor: (apt) => {
         // Try multiple possible paths for temperature
-        const temp = apt.metar?.temperature?.celsius || 
-                    apt.metar?.temp?.celsius || 
-                    apt.metar?.temperature || 
-                    apt.metar?.temp ||
-                    apt.metar?.temperatureCelsius ||
-                    apt.metar?.tempCelsius;
-        
+        const temp = apt.metar?.temperature?.celsius ||
+          apt.metar?.temp?.celsius ||
+          apt.metar?.temperature ||
+          apt.metar?.temp ||
+          apt.metar?.temperatureCelsius ||
+          apt.metar?.tempCelsius;
+
         // If we have a number, return it
         if (typeof temp === 'number') return temp;
-        
+
         // If we have a string, try to parse it
         if (typeof temp === 'string') {
           const parsed = parseFloat(temp);
           if (!isNaN(parsed)) return parsed;
         }
-        
+
         // Fallback: generate sample data for demonstration
         return Math.round(Math.random() * 30 - 10); // Random temp between -10 and 20°C
       },
@@ -754,48 +1073,48 @@ function createWeatherGraphs() {
       pointBackgroundColor: 'rgba(255, 99, 132, 1)',
       pointBorderColor: 'rgba(255, 99, 132, 1)'
     },
-    { 
-      key: 'wind_speed', 
-      label: 'Wind Speed', 
+    {
+      key: 'wind_speed',
+      label: 'Wind Speed',
       unit: 'kt',
       chartType: 'bar', // Use bar chart for wind speed
       extractor: (apt) => {
         // Try multiple possible paths for wind speed
-        const wind = apt.metar?.wind?.speed_kts || 
-                    apt.metar?.wind?.speedKts || 
-                    apt.metar?.wind?.speed || 
-                    apt.metar?.windSpeed ||
-                    apt.metar?.wind?.kts;
-        
+        const wind = apt.metar?.wind?.speed_kts ||
+          apt.metar?.wind?.speedKts ||
+          apt.metar?.wind?.speed ||
+          apt.metar?.windSpeed ||
+          apt.metar?.wind?.kts;
+
         if (typeof wind === 'number') return wind;
         if (typeof wind === 'string') {
           const parsed = parseFloat(wind);
           if (!isNaN(parsed)) return parsed;
         }
-        
+
         // Fallback: generate sample data
         return Math.round(Math.random() * 25 + 5); // Random wind between 5-30 kt
       },
       backgroundColor: 'rgba(54, 162, 235, 0.6)',
       borderColor: 'rgba(54, 162, 235, 1)'
     },
-    { 
-      key: 'wind_gust', 
-      label: 'Wind Gust', 
+    {
+      key: 'wind_gust',
+      label: 'Wind Gust',
       unit: 'kt',
       chartType: 'line', // Use line chart for wind gust
       extractor: (apt) => {
-        const gust = apt.metar?.wind?.gust_kts || 
-                    apt.metar?.wind?.gustKts || 
-                    apt.metar?.wind?.gust || 
-                    apt.metar?.windGust;
-        
+        const gust = apt.metar?.wind?.gust_kts ||
+          apt.metar?.wind?.gustKts ||
+          apt.metar?.wind?.gust ||
+          apt.metar?.windGust;
+
         if (typeof gust === 'number') return gust;
         if (typeof gust === 'string') {
           const parsed = parseFloat(gust);
           if (!isNaN(parsed)) return parsed;
         }
-        
+
         // Fallback: generate sample data (gusts are usually higher than base wind)
         return Math.round(Math.random() * 15 + 20); // Random gust between 20-35 kt
       },
@@ -804,48 +1123,48 @@ function createWeatherGraphs() {
       pointBackgroundColor: 'rgba(255, 206, 86, 1)',
       pointBorderColor: 'rgba(255, 206, 86, 1)'
     },
-    { 
-      key: 'visibility', 
-      label: 'Visibility', 
+    {
+      key: 'visibility',
+      label: 'Visibility',
       unit: 'SM',
       chartType: 'bar', // Use bar chart for visibility
       extractor: (apt) => {
-        const vis = apt.metar?.visibility?.miles_float || 
-                   apt.metar?.visibility?.milesFloat || 
-                   apt.metar?.visibility?.miles || 
-                   apt.metar?.visibility ||
-                   apt.metar?.vis;
-        
+        const vis = apt.metar?.visibility?.miles_float ||
+          apt.metar?.visibility?.milesFloat ||
+          apt.metar?.visibility?.miles ||
+          apt.metar?.visibility ||
+          apt.metar?.vis;
+
         if (typeof vis === 'number') return vis;
         if (typeof vis === 'string') {
           const parsed = parseFloat(vis);
           if (!isNaN(parsed)) return parsed;
         }
-        
+
         // Fallback: generate sample data
         return Math.round((Math.random() * 8 + 2) * 10) / 10; // Random visibility between 2-10 SM
       },
       backgroundColor: 'rgba(75, 192, 192, 0.6)',
       borderColor: 'rgba(75, 192, 192, 1)'
     },
-    { 
-      key: 'altimeter', 
-      label: 'Altimeter', 
+    {
+      key: 'altimeter',
+      label: 'Altimeter',
       unit: 'inHg',
       chartType: 'line', // Use line chart for altimeter
       extractor: (apt) => {
-        const alt = apt.metar?.barometer?.hg || 
-                   apt.metar?.barometer?.inHg || 
-                   apt.metar?.barometer || 
-                   apt.metar?.altimeter ||
-                   apt.metar?.pressure;
-        
+        const alt = apt.metar?.barometer?.hg ||
+          apt.metar?.barometer?.inHg ||
+          apt.metar?.barometer ||
+          apt.metar?.altimeter ||
+          apt.metar?.pressure;
+
         if (typeof alt === 'number') return alt;
         if (typeof alt === 'string') {
           const parsed = parseFloat(alt);
           if (!isNaN(parsed)) return parsed;
         }
-        
+
         // Fallback: generate sample data (typical altimeter range)
         return Math.round((Math.random() * 0.5 + 29.5) * 100) / 100; // Random altimeter between 29.50-30.00
       },
@@ -854,24 +1173,24 @@ function createWeatherGraphs() {
       pointBackgroundColor: 'rgba(153, 102, 255, 1)',
       pointBorderColor: 'rgba(153, 102, 255, 1)'
     },
-    { 
-      key: 'dewpoint', 
-      label: 'Dew Point', 
+    {
+      key: 'dewpoint',
+      label: 'Dew Point',
       unit: '°C',
       chartType: 'bar', // Use bar chart for dew point
       extractor: (apt) => {
-        const dew = apt.metar?.dewpoint?.celsius || 
-                   apt.metar?.dewpoint?.celsius || 
-                   apt.metar?.dewpoint || 
-                   apt.metar?.dewPoint ||
-                   apt.metar?.dewpointCelsius;
-        
+        const dew = apt.metar?.dewpoint?.celsius ||
+          apt.metar?.dewpoint?.celsius ||
+          apt.metar?.dewpoint ||
+          apt.metar?.dewPoint ||
+          apt.metar?.dewpointCelsius;
+
         if (typeof dew === 'number') return dew;
         if (typeof dew === 'string') {
           const parsed = parseFloat(dew);
           if (!isNaN(parsed)) return parsed;
         }
-        
+
         // Fallback: generate sample data (dewpoint is usually lower than temperature)
         return Math.round(Math.random() * 20 - 15); // Random dewpoint between -15 and 5°C
       },
@@ -887,28 +1206,28 @@ function createWeatherGraphs() {
     chartContainer.className = 'chart-container';
     chartContainer.style.width = '100%';
     chartContainer.style.marginBottom = '2rem';
-    
+
     // Create title
     const title = document.createElement('h3');
     title.textContent = param.label;
     title.style.textAlign = 'center';
     title.style.marginBottom = '1rem';
     title.style.color = 'var(--apache-green)';
-    
+
     // Create canvas
     const canvas = document.createElement('canvas');
     canvas.style.width = '100%';
     canvas.style.height = '300px';
-    
+
     // Append elements to container
     chartContainer.appendChild(title);
     chartContainer.appendChild(canvas);
     container.appendChild(chartContainer);
-    
+
     // Get data for this parameter
     const labels = [];
     const values = [];
-    
+
     AppState.data.legs.forEach(leg => {
       if (leg.icao) {
         labels.push(leg.icao);
@@ -916,13 +1235,13 @@ function createWeatherGraphs() {
         values.push(value);
       }
     });
-    
+
     console.log(`Data for ${param.label}:`, { labels, values });
-    
+
     // Create chart with appropriate type
     try {
       const ctx = canvas.getContext('2d');
-      
+
       // Create the chart
       const chart = new Chart(ctx, {
         type: param.chartType, // Use the specified chart type
@@ -953,7 +1272,7 @@ function createWeatherGraphs() {
             },
             tooltip: {
               callbacks: {
-                label: function(context) {
+                label: function (context) {
                   let label = context.dataset.label || '';
                   if (label) {
                     label += ': ';
@@ -980,7 +1299,7 @@ function createWeatherGraphs() {
               },
               ticks: {
                 color: 'rgba(255, 255, 255, 0.7)',
-                callback: function(value) {
+                callback: function (value) {
                   return value + (param.unit === '°C' ? '°' : ' ' + param.unit);
                 }
               }
@@ -996,11 +1315,11 @@ function createWeatherGraphs() {
           }
         }
       });
-      
+
       // Store chart instance for potential updates
       if (!window.chartInstances) window.chartInstances = [];
       window.chartInstances.push(chart);
-      
+
     } catch (error) {
       console.error('Error creating chart:', error);
       const errorEl = document.createElement('div');
@@ -1043,11 +1362,11 @@ function initMapIfData() {
   // Add markers for each airport in order
   legs.forEach((leg, index) => {
     if (!leg.coords) return;
-    
+
     // Create different marker styles for departure, intermediate, and arrival
     let markerColor = '#00ff85'; // Default Apache green
     let markerText = 'A';
-    
+
     if (index === 0) {
       // Departure airport
       markerColor = '#00ff85';
@@ -1061,7 +1380,7 @@ function initMapIfData() {
       markerColor = '#ffaa00';
       markerText = (index + 1).toString();
     }
-    
+
     const marker = L.marker(leg.coords, {
       icon: L.divIcon({
         className: 'airport-marker',
@@ -1083,12 +1402,12 @@ function initMapIfData() {
         iconAnchor: [15, 15]
       })
     }).addTo(layer);
-    
+
     // Create popup with airport info
-    const airportType = index === 0 ? 'Departure' : 
-                       index === legs.length - 1 ? 'Arrival' : 
-                       `Stop ${index + 1}`;
-    
+    const airportType = index === 0 ? 'Departure' :
+      index === legs.length - 1 ? 'Arrival' :
+        `Stop ${index + 1}`;
+
     const popupContent = `
       <div style="color: #000; text-align: center;">
         <b>${leg.icao}</b><br>
@@ -1105,7 +1424,7 @@ function initMapIfData() {
     for (let i = 0; i < coords.length - 1; i++) {
       const start = coords[i];
       const end = coords[i + 1];
-      
+
       // Generate great circle path between consecutive airports
       const arc = generateGreatCircle(start[0], start[1], end[0], end[1], 64);
 
@@ -1114,17 +1433,17 @@ function initMapIfData() {
 
       // Render each segment as a solid dark blue line
       segments.forEach(segment => {
-        L.polyline(segment, { 
+        L.polyline(segment, {
           color: '#1e3a8a', // Dark blue
           weight: 4,
           opacity: 0.9
         }).addTo(layer);
       });
-      
+
       // Add direction arrow at 75% of the segment (use raw start/end for position)
       const arrowLat = start[0] + (end[0] - start[0]) * 0.75;
       const arrowLon = start[1] + (end[1] - start[1]) * 0.75;
-      
+
       L.marker([arrowLat, arrowLon], {
         icon: L.divIcon({
           className: 'flight-arrow',
@@ -1134,14 +1453,14 @@ function initMapIfData() {
         })
       }).addTo(layer);
     }
-    
+
     // Fit map to show all airports with padding
     const group = new L.featureGroup(layer.getLayers());
     map.fitBounds(group.getBounds().pad(0.15));
-    
+
     // Add a legend (no emojis)
-    const legend = L.control({position: 'bottomright'});
-    legend.onAdd = function(map) {
+    const legend = L.control({ position: 'bottomright' });
+    legend.onAdd = function (map) {
       const div = L.DomUtil.create('div', 'flight-legend');
       div.style.cssText = `
         background: rgba(0, 0, 0, 0.8);
@@ -1220,7 +1539,7 @@ function cartesianToLatLon([x, y, z]) {
   return [lat, lon];
 }
 
-function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 function toRad(d) { return d * Math.PI / 180; }
 function toDeg(r) { return r * 180 / Math.PI; }
 function normalizeLonDeg(lon) {
@@ -1348,7 +1667,7 @@ function splitArcAtAntimeridian(points) {
       utter.pitch = 1;
       window.speechSynthesis.cancel();
       window.speechSynthesis.speak(utter);
-    } catch {}
+    } catch { }
   }
 
   function isPirepModeEnabled() {
@@ -1364,7 +1683,7 @@ function splitArcAtAntimeridian(points) {
     if (btn) btn.style.display = enabled ? 'flex' : 'none';
     if (!enabled) {
       // stop listening, hide transcript/help
-      try { voice.toggle(false); } catch {}
+      try { voice.toggle(false); } catch { }
       setTranscript('');
       if (help && !help.classList.contains('hidden')) hideHelpModal();
     }
@@ -1473,7 +1792,7 @@ function splitArcAtAntimeridian(points) {
           grammars.addFromString(jsgf, 1);
           reconn.grammars = grammars;
         }
-      } catch {}
+      } catch { }
 
       reconn.onstart = () => {
         active = true;
@@ -1493,7 +1812,7 @@ function splitArcAtAntimeridian(points) {
           } else {
             finalBuffer += (finalBuffer ? ' ' : '') + transcript;
             setTranscript(finalBuffer);
-            try { if (handleIntent(transcript)) finalBuffer = ''; } catch {}
+            try { if (handleIntent(transcript)) finalBuffer = ''; } catch { }
           }
         }
         idleTimer = setTimeout(() => {
@@ -1525,11 +1844,11 @@ function splitArcAtAntimeridian(points) {
         if (fab) fab.classList.remove('recording');
         active = false;
         if (desired && isPirepModeEnabled()) {
-          setTimeout(() => { try { reconn.start(); } catch {} }, 300);
+          setTimeout(() => { try { reconn.start(); } catch { } }, 300);
         }
       };
 
-      try { reconn.start(); } catch {}
+      try { reconn.start(); } catch { }
     }
 
     async function toggle(force) {
@@ -1541,7 +1860,7 @@ function splitArcAtAntimeridian(points) {
         start();
       } else {
         if (reconn && active) {
-          try { reconn.stop(); } catch {}
+          try { reconn.stop(); } catch { }
         }
         setTranscript('');
       }
@@ -1578,16 +1897,235 @@ function splitArcAtAntimeridian(points) {
   }
 
   const origRender = render;
-  render = function() {
+  render = function () {
     origRender.apply(this, arguments);
-    try { initVoiceAssistant(); updateVoiceAvailability(); } catch {}
+    try { initVoiceAssistant(); updateVoiceAvailability(); } catch { }
   };
 
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    setTimeout(() => { try { initVoiceAssistant(); updateVoiceAvailability(); } catch {} }, 0);
+    setTimeout(() => { try { initVoiceAssistant(); updateVoiceAvailability(); } catch { } }, 0);
   } else {
-    document.addEventListener('DOMContentLoaded', () => { try { initVoiceAssistant(); updateVoiceAvailability(); } catch {} });
+    document.addEventListener('DOMContentLoaded', () => { try { initVoiceAssistant(); updateVoiceAvailability(); } catch { } });
   }
 })();
 // ---------- End Voice Assistant ----------
 
+// ---------- NEW FEATURE: Performance Calculations ----------
+const aircraftPerformanceData = {
+  'C172': { name: 'Cessna 172', cruiseTas: 120, fuelBurn: 8, fuelUnit: 'GPH' },
+  'B737': { name: 'Boeing 737', cruiseTas: 450, fuelBurn: 5000, fuelUnit: 'PPH' },
+  'A320': { name: 'Airbus A320', cruiseTas: 470, fuelBurn: 5300, fuelUnit: 'PPH' },
+};
+
+function haversineDistance(coords1, coords2) {
+  const R = 3440.065; // Earth radius in nautical miles
+  const lat1 = toRad(coords1[0]);
+  const lon1 = toRad(coords1[1]);
+  const lat2 = toRad(coords2[0]);
+  const lon2 = toRad(coords2[1]);
+
+  const dLat = lat2 - lat1;
+  const dLon = lon2 - lon1;
+
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function calculatePerformance(legs, aircraftType) {
+  const aircraft = aircraftPerformanceData[aircraftType] || aircraftPerformanceData['C172'];
+  let totalDistance = 0;
+  let totalTimeHours = 0;
+
+  if (!legs || legs.length < 2) {
+    return {
+      totalDistance: 0,
+      totalTime: { hours: 0, minutes: 0 },
+      totalFuel: 0,
+      aircraft,
+    };
+  }
+
+  for (let i = 0; i < legs.length - 1; i++) {
+    const legStart = legs[i];
+    const legEnd = legs[i + 1];
+
+    if (!legStart.coords || !legEnd.coords) continue;
+
+    const distance = haversineDistance(legStart.coords, legEnd.coords);
+    totalDistance += distance;
+
+    const windSpeed = legStart.metar?.wind?.speed_kts || 0;
+    const windDir = legStart.metar?.wind?.degrees || 0;
+
+    const track = calculateBearing(legStart.coords, legEnd.coords);
+
+    // Calculate headwind component
+    const windAngle = Math.abs(track - windDir);
+    const headwind = windSpeed * Math.cos(toRad(windAngle));
+
+    const groundSpeed = aircraft.cruiseTas - headwind;
+
+    if (groundSpeed > 0) {
+      totalTimeHours += distance / groundSpeed;
+    }
+  }
+
+  const totalMinutes = Math.round(totalTimeHours * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  const totalFuel = totalTimeHours * aircraft.fuelBurn;
+
+  return {
+    totalDistance,
+    totalTime: { hours, minutes },
+    totalFuel,
+    aircraft,
+  };
+}
+
+function calculateBearing(coords1, coords2) {
+  const lat1 = toRad(coords1[0]);
+  const lon1 = toRad(coords1[1]);
+  const lat2 = toRad(coords2[0]);
+  const lon2 = toRad(coords2[1]);
+
+  const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+  const brng = toDeg(Math.atan2(y, x));
+  return (brng + 360) % 360;
+}
+
+// ---------- NEW FEATURE: Alternative Route Suggestions ----------
+const nearbyMajorAirports = {
+  'KJFK': 'KPHL', 'KORD': 'KMDW', 'KLAX': 'KSNA', 'KATL': 'KPDK',
+  'KDFW': 'KDAL', 'KSFO': 'KOAK', 'KLAS': 'KHND', 'KDEN': 'KBJC',
+};
+
+async function analyzeAndSuggestRoutes() {
+  if (!AppState.data || !AppState.data.legs) return;
+
+  const primaryRoute = AppState.data.legs;
+  let adverseAirportIndex = -1;
+
+  // Find the first airport with IFR or LIFR conditions
+  for (let i = 0; i < primaryRoute.length; i++) {
+    const leg = primaryRoute[i];
+    if (leg.category === 'IFR' || leg.category === 'LIFR') {
+      adverseAirportIndex = i;
+      break;
+    }
+  }
+
+  if (adverseAirportIndex === -1) return; // No adverse weather found
+
+  const adverseAirportIcao = primaryRoute[adverseAirportIndex].icao;
+  const alternativeIcao = nearbyMajorAirports[adverseAirportIcao];
+
+  if (!alternativeIcao) return; // No alternative available for this airport
+
+  const originalRouteIcaos = primaryRoute.map(leg => leg.icao);
+  const alternativeRouteIcaos = [...originalRouteIcaos];
+  alternativeRouteIcaos[adverseAirportIndex] = alternativeIcao;
+
+  // Fetch briefing for the alternative route
+  try {
+    const section = document.getElementById('alternative-routes-section');
+    const content = document.getElementById('alternative-routes-content');
+    if (!section || !content) return;
+
+    content.innerHTML = `<p class="text-center" style="color: #ffffff;">Analyzing alternative route...</p>`;
+    section.classList.remove('hidden');
+
+    const params = new URLSearchParams({
+      codes: alternativeRouteIcaos.join(','),
+      include_notams: 'false' // Simplified for comparison
+    });
+    const resp = await fetch(`/briefing?${params.toString()}`);
+    if (!resp.ok) throw new Error('Failed to fetch alternative briefing');
+    const altData = await resp.json();
+
+    const altLegs = mapReportsToLegs(altData.metar_reports || [], altData.taf_reports || []);
+    altLegs.forEach((leg, index) => {
+      if (altData.metar_reports && altData.metar_reports[index]) {
+        leg.metar = altData.metar_reports[index];
+      }
+    });
+
+    const primaryPerf = calculatePerformance(primaryRoute, AppState.data.aircraftType);
+    const altPerf = calculatePerformance(altLegs, AppState.data.aircraftType);
+
+    renderAlternativeComparison(content, {
+      primary: { route: originalRouteIcaos, perf: primaryPerf, legs: primaryRoute },
+      alternative: { route: alternativeRouteIcaos, perf: altPerf, legs: altLegs, reason: `Adverse weather at ${adverseAirportIcao}` }
+    });
+  } catch (err) {
+    console.error("Error fetching alternative route:", err);
+    const section = document.getElementById('alternative-routes-section');
+    if (section) section.classList.add('hidden');
+  }
+}
+
+function renderAlternativeComparison(container, data) {
+  container.innerHTML = `
+        <p class="mb-4" style="color: #ffffff;">The primary route includes an airport with significant weather (${data.alternative.reason}). A safer alternative is suggested below for comparison.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="card p-4 border-2 border-red-500">
+                <h4 class="font-bold text-lg mb-2 text-red-400">Primary Route</h4>
+                <p class="font-mono text-center text-lg mb-3" style="color: #ffffff;">${data.primary.route.join(' → ')}</p>
+                ${renderComparisonMetrics(data.primary)}
+                <div class="mt-3">
+                    <h5 class="font-semibold text-sm mb-2" style="color: var(--apache-green);">Conditions:</h5>
+                    ${data.primary.legs.map(leg => renderLegCondition(leg, leg.icao === data.alternative.reason.split(' ')[3])).join('')}
+                </div>
+            </div>
+
+            <div class="card p-4 border-2 border-green-500">
+                <h4 class="font-bold text-lg mb-2 text-green-400">Suggested Alternative</h4>
+                <p class="font-mono text-center text-lg mb-3" style="color: #ffffff;">${data.alternative.route.join(' → ')}</p>
+                ${renderComparisonMetrics(data.alternative)}
+                 <div class="mt-3">
+                    <h5 class="font-semibold text-sm mb-2" style="color: var(--apache-green);">Conditions:</h5>
+                    ${data.alternative.legs.map(leg => renderLegCondition(leg, false)).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderComparisonMetrics(routeData) {
+  const perf = routeData.perf;
+  return `
+        <div class="grid grid-cols-3 gap-2 text-center bg-gray-800/50 p-2 rounded-lg">
+            <div>
+                <div class="text-xs text-gray-400">Distance</div>
+                <div class="font-bold text-md" style="color: #ffffff;">${perf.totalDistance.toFixed(0)} NM</div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-400">Time</div>
+                <div class="font-bold text-md" style="color: #ffffff;">${perf.totalTime.hours}h ${perf.totalTime.minutes}m</div>
+            </div>
+            <div>
+                <div class="text-xs text-gray-400">Fuel</div>
+                <div class="font-bold text-md" style="color: #ffffff;">${perf.totalFuel.toFixed(0)} ${perf.aircraft.fuelUnit}</div>
+            </div>
+        </div>
+    `;
+}
+
+function renderLegCondition(leg, isAdverse) {
+  const categoryClass = { VFR: 'text-green-400', MVFR: 'text-blue-400', IFR: 'text-red-400', LIFR: 'text-pink-400' }[leg.category] || 'text-gray-400';
+  const wind = leg.metar?.wind ? `${leg.metar.wind.degrees}° @ ${leg.metar.wind.speed_kts}kt` : 'N/A';
+  const adverseStyle = isAdverse ? 'background-color: rgba(255,0,0,0.2); border-left: 3px solid #f00;' : '';
+  return `
+        <div class="flex justify-between items-center text-sm p-1 rounded" style="color: #ffffff; ${adverseStyle}">
+            <span class="font-mono font-bold">${leg.icao}</span>
+            <span class="font-semibold ${categoryClass}">${leg.category}</span>
+            <span>${wind}</span>
+        </div>
+    `;
+}
